@@ -34,26 +34,26 @@ class Logger:
     ): 
         self.meta_info_dict = meta_info_dict
         self.log_dir_path = log_dir_path
+        os.makedirs(log_dir_path, exist_ok=True)
 
         # Each epoch info will be an element of this list
         self.info = []
-
-        # Load from log_dir_path
-        self.load()
 
         # Internal variables for plotting
         self.periodic_plot = periodic_plot
         self.period = period
         self.plot_counter = 0
+        self.is_loading = False
 
-        # Initialize plots
-        if self.periodic_plot:
-            self.plot()
+        # Load from log_dir_path
+        self.load()
 
     
     def new_epoch(self):
         """Start a new epoch."""
-
+        if not self.is_loading and self.periodic_plot:
+            self.plot()
+            
         info_dict = {k: [] for k in self.meta_info_dict.keys()}
         self.info.append(info_dict)
 
@@ -84,13 +84,13 @@ class Logger:
         info = {k: [] for k in self.meta_info_dict}
         for epoch_info in self.info:
             for k, v in epoch_info.items():
-                data[k].extend(v)
+                info[k].extend(v)
 
         # Plot
-        for k, v in data.items():
+        for k, v in info.items():
             plt.title(k)
-            if 'yscale' in self.meta_info_dict['k']:
-                plt.yscale(self.meta_info_dict['k']['yscale'])
+            if 'yscale' in self.meta_info_dict[k]:
+                plt.yscale(self.meta_info_dict[k]['yscale'])
             else:
                 plt.yscale('log')
             plt.plot(v)
@@ -107,38 +107,41 @@ class Logger:
         for k in self.meta_info_dict.keys():
             path = os.path.join(
                 self.log_dir_path,
-                f'{k}_{len(self.info) - epoch:02d}.json',
+                f'{k}_{epoch:02d}.json',
             )
             with open(path, 'w') as f:
                 json.dump(self.info[epoch][k], f, indent=4)
 
     
     def save_last_epoch(self):
-        self.save_epoch(-1)
+        self.save_epoch(len(self.info) - 1)
 
 
     def load_epoch(self, epoch):
         for k in self.meta_info_dict.keys():
             path = os.path.join(
                 self.log_dir_path,
-                f'{k}_{len(self.info) - epoch:02d}.json',
+                f'{k}_{epoch:02d}.json',
             )
-            if os.exists(path):
+            if os.path.exists(path):
                 with open(path, 'r') as f:
                     key_info = json.load(f)
-                self.info[k] = key_info
+                self.info[-1][k] = key_info
             else:
                 raise FileNotFoundError
 
 
     def load(self):
+        self.is_loading = True
         epoch = 0
         while True:
             self.new_epoch()
             try:
                 self.load_epoch(epoch)
+                epoch = epoch + 1
             except FileNotFoundError:
                 del self.info[-1]
+                self.is_loading = False
                 return
 
 
